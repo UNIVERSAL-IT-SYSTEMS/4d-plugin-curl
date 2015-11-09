@@ -64,6 +64,33 @@ Progress SET PROGRESS ($progressId;$progress;$message)
 $0:=Progress Stopped ($progressId)
 ```
 
+###Header callback
+
+```
+C_BLOB($in;$out)
+C_LONGINT($err)
+
+ARRAY LONGINT($optionNames;0)
+ARRAY TEXT($optionValues;0)
+
+APPEND TO ARRAY($optionNames;CURLOPT_HEADERFUNCTION)
+APPEND TO ARRAY($optionValues;"CB_HEADER")
+
+$err:=cURL ("http://www.4d.com/sites/all/themes/dimention/images/home/logo4D.jpg";$optionNames;$optionValues;$in;$out)
+
+```
+
+``CB_HEADER``
+
+```
+C_BLOB($1)
+C_BOOLEAN($0)
+
+$header:=BLOB to text($1;Mac text without length)
+
+MESSAGE($header)
+```
+
 ###cURL Get executable
 
 Returns the path to the curl executable embedded in the plugin. You can use this with LAUNCH EXTERNAL PROCESS.
