@@ -16,7 +16,57 @@ To migrate existing methods, do the following:
  
 New
 ---
-**cURL Get executable**
+
+###Progress callback
+
+```
+$url:="http://www.4d.com/sites/default/files/Homepage-banner_4D-Mobile_ja.jpg"
+
+Progress QUIT (0)
+
+$progressId:=Progress New 
+Progress SET PROGRESS ($progressId;-1)
+Progress SET BUTTON ENABLED ($progressId;True)
+
+ARRAY LONGINT($optionNames;0)
+ARRAY TEXT($optionValues;0)
+
+APPEND TO ARRAY($optionNames;CURLOPT_XFERINFOFUNCTION)
+APPEND TO ARRAY($optionValues;"CB_PROGRESS_DL")
+
+APPEND TO ARRAY($optionNames;CURLOPT_XFERINFODATA)
+APPEND TO ARRAY($optionValues;String($progressId))  //will be passed as $1
+
+$err:=cURL ($url;$optionNames;$optionValues;$in;$out)
+
+Progress QUIT ($progressId)
+```
+
+####CB_PROGRESS_DL
+
+```
+C_LONGINT($1;$2;$3;$4;$5)
+C_BOOLEAN($0)
+
+$progressId:=$1
+  //download info
+$dltotal:=$2
+$dlnow:=$3
+  //upload info
+  //$ultotal:=$4
+  //$ulnow:=$5
+
+$progress:=Choose($dltotal#0;$dlnow/$dltotal;-1)
+$message:=Choose($progress#-1;String($dlnow)+"/"+String($dltotal)+" bytes downloaded";"connecting...")
+
+Progress SET PROGRESS ($progressId;$progress;$message)
+
+$0:=Progress Stopped ($progressId)
+```
+
+New
+---
+###cURL Get executable
 
 Returns the path to the curl executable embedded in the plugin. You can use this with LAUNCH EXTERNAL PROCESS.
 
