@@ -16,6 +16,9 @@
 std::map<uint32_t, uint32_t> _curl_write_method_ids;
 std::map<uint32_t, uint32_t> _curl_read_method_ids;
 std::map<uint32_t, uint32_t> _curl_debug_method_ids;
+std::map<uint32_t, uint32_t> _curl_progress_ids;
+std::map<uint32_t, uint32_t> _curl_progress_method_ids;
+std::map<uint32_t, uint32_t> _curl_header_method_ids;
 
 CURLcode curl_easy_perform_with_yield(CURL *easy, void (*_PA_YieldAbsolute)(void));
 
@@ -56,8 +59,42 @@ size_t _cURL_write_data(void *buffer, size_t size, size_t nmemb, C_BLOB &outData
     return len;
 }
 
+size_t _cURL_header_data(void *buffer, size_t size, size_t nmemb, void *userdata){
+    
+    PA_YieldAbsolute();
+    
+    size_t len = size * nmemb;
+    
+    uint32_t processId = PA_GetCurrentProcessNumber();
+    uint32_t _curl_header_method_id = 0;
+    
+    std::map<uint32_t, uint32_t>::iterator pos = _curl_header_method_ids.find(processId);
+    
+    if(pos != _curl_header_method_ids.end()) {
+        _curl_header_method_id = pos->second;
+        if(_curl_header_method_id){
+            if(!PA_IsProcessDying()){
+                PA_Variable	params[1];
+                params[0] = PA_CreateVariable(eVK_Blob);
+                PA_SetBlobVariable(&params[0], buffer, len);
+                PA_Variable statusCode = PA_ExecuteMethodByID(_curl_header_method_id, params, 1);
+                if(PA_GetVariableKind(statusCode) == eVK_Boolean){
+                    if(PA_GetBooleanVariable(statusCode)){
+                        if(len){len=0;}else{len=1;}
+                    }
+                }
+                PA_ClearVariable(&params[0]);
+                PA_ClearVariable(&params[1]);
+            }
+        }
+    }
+    
+    return len;
+}
+
 size_t _cURL_debug_data(CURL *_curl, curl_infotype infoType, char * buffer, size_t bufferLen, void *userData){
     
+    size_t result = 0;
     PA_YieldAbsolute();
     
     uint32_t processId = PA_GetCurrentProcessNumber();
@@ -74,14 +111,19 @@ size_t _cURL_debug_data(CURL *_curl, curl_infotype infoType, char * buffer, size
                 params[1] = PA_CreateVariable(eVK_Blob);
                 PA_SetLongintVariable(&params[0], infoType);
                 PA_SetBlobVariable(&params[1], buffer, bufferLen);
-                PA_ExecuteMethodByID(_curl_debug_method_id, params, 2);   
+                PA_Variable statusCode = PA_ExecuteMethodByID(_curl_debug_method_id, params, 2);
+                if(PA_GetVariableKind(statusCode) == eVK_Boolean){
+                    if(PA_GetBooleanVariable(statusCode)){
+                        result = 1;
+                    }
+                }
                 PA_ClearVariable(&params[0]);
                 PA_ClearVariable(&params[1]);
             }
         }
     }
     
-    return 0;
+    return result;
 }
 
 size_t _cURL_read_data(void *buffer, size_t size, size_t nmemb, C_BLOB &inData){
@@ -120,6 +162,72 @@ size_t _cURL_read_data(void *buffer, size_t size, size_t nmemb, C_BLOB &inData){
     }
     
     return len;
+}
+
+size_t _cURL_xfer_data(void *buffer,   curl_off_t dltotal,   curl_off_t dlnow,   curl_off_t ultotal,   curl_off_t ulnow)
+{
+    size_t result = 0;
+    PA_YieldAbsolute();
+    
+    uint32_t processId = PA_GetCurrentProcessNumber();
+    uint32_t _curl_progress_id = 0;
+    uint32_t _curl_progress_method_id = 0;
+    
+    std::map<uint32_t, uint32_t>::iterator pos = _curl_progress_ids.find(processId);
+    
+    if(pos != _curl_progress_ids.end()) {
+        _curl_progress_id = pos->second;
+    }
+    
+    pos = _curl_progress_method_ids.find(processId);
+    
+    if(pos != _curl_progress_method_ids.end()) {
+        _curl_progress_method_id = pos->second;
+        if(_curl_progress_method_id){
+        
+            if(!PA_IsProcessDying()){
+                PA_Variable	params[5];
+                params[0] = PA_CreateVariable(eVK_Longint);
+                params[1] = PA_CreateVariable(eVK_Longint);
+                params[2] = PA_CreateVariable(eVK_Longint);
+                params[3] = PA_CreateVariable(eVK_Longint);
+                params[4] = PA_CreateVariable(eVK_Longint);
+                PA_SetLongintVariable(&params[0], _curl_progress_id);
+                PA_SetLongintVariable(&params[1], dltotal);
+                PA_SetLongintVariable(&params[2], dlnow);
+                PA_SetLongintVariable(&params[3], ultotal);
+                PA_SetLongintVariable(&params[4], ulnow);
+                PA_Variable statusCode = PA_ExecuteMethodByID(_curl_progress_method_id, params, 5);
+                if(PA_GetVariableKind(statusCode) == eVK_Boolean){
+                    if(PA_GetBooleanVariable(statusCode)){
+                        result = 1;
+                    }
+                }
+                //impossible to catch aborted trace!!
+                /*
+                if(PA_IsProcessDying()){
+                    result = 1;
+                }
+                C_TEXT processName;
+                PA_long32 processState;
+                PA_long32 processTime;
+                PA_GetProcessInfo(processId, processName, &processState, &processTime);
+                if(processState < 0)
+                {
+                    result = 1;
+                }
+                 */
+                PA_ClearVariable(&params[0]);
+                PA_ClearVariable(&params[1]);
+                PA_ClearVariable(&params[2]);
+                PA_ClearVariable(&params[3]);
+                PA_ClearVariable(&params[4]);
+            }
+        
+        }
+    }
+    
+    return result;
 }
 
 void PluginMain(PA_long32 selector, PA_PluginParameters params)
@@ -213,13 +321,15 @@ void _cURL(sLONG_PTR *pResult, PackagePtr pParams)
         CUTF8String url;
         Param1Url.copyUTF8String(&url);
         
-        error = curl_easy_setopt(curl, CURLOPT_READFUNCTION, _cURL_read_data);
-        error = curl_easy_setopt(curl, CURLOPT_READDATA, &Param4InData);
+//        error = curl_easy_setopt(curl, CURLOPT_READFUNCTION, _cURL_read_data);
+//        error = curl_easy_setopt(curl, CURLOPT_READDATA, &Param4InData);
+//        error = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, _cURL_write_data);
+//        error = curl_easy_setopt(curl, CURLOPT_WRITEDATA, &Param5OutData);
+//        error = curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, _cURL_debug_data);
+//        error = curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, _cURL_xfer_data);
+//        error = curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, _cURL_header_data);
         
-        error = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, _cURL_write_data);
-        error = curl_easy_setopt(curl, CURLOPT_WRITEDATA, &Param5OutData);
-        
-        error = curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, _cURL_debug_data);
+        curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 1);
         
         struct curl_slist *values_CURLOPT_MAIL_RCPT = NULL;
         
@@ -242,6 +352,9 @@ void _cURL(sLONG_PTR *pResult, PackagePtr pParams)
             uint32_t _curl_write_method_id;
             uint32_t _curl_read_method_id;
             uint32_t _curl_debug_method_id;
+            uint32_t _curl_progress_id;
+            uint32_t _curl_progress_method_id;
+            uint32_t _curl_header_method_id;
             
             for(unsigned int i = 0; i < Param2Keys.getSize(); ++i){
                 
@@ -258,19 +371,49 @@ void _cURL(sLONG_PTR *pResult, PackagePtr pParams)
                         Param3Values.copyUTF16StringAtIndex(&methodName, i);
                         _curl_debug_method_id = PA_GetMethodID((PA_Unichar *)methodName.c_str());
                         if(_curl_debug_method_id){
-                            error = curl_easy_setopt(curl, CURLOPT_VERBOSE, 1);	
+                            error = curl_easy_setopt(curl, CURLOPT_VERBOSE, 1);
+                            error = curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, _cURL_debug_data);
+                            _curl_debug_method_ids.insert(std::map<uint32_t, uint32_t>::value_type(processId, _curl_debug_method_id));
                         }
-                        _curl_debug_method_ids.insert(std::map<uint32_t, uint32_t>::value_type(processId, _curl_debug_method_id));
                         break;	
                     case 11://CURLOPT_WRITEFUNCTION
                         Param3Values.copyUTF16StringAtIndex(&methodName, i);
                         _curl_write_method_id = PA_GetMethodID((PA_Unichar *)methodName.c_str());
-                        _curl_write_method_ids.insert(std::map<uint32_t, uint32_t>::value_type(processId, _curl_write_method_id));
+                        if(_curl_write_method_id){
+                            error = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, _cURL_write_data);
+                            error = curl_easy_setopt(curl, CURLOPT_WRITEDATA, &Param5OutData);
+                            _curl_write_method_ids.insert(std::map<uint32_t, uint32_t>::value_type(processId, _curl_write_method_id));
+                        }
                         break;
                     case 12://CURLOPT_READFUNCTION
                         Param3Values.copyUTF16StringAtIndex(&methodName, i);
                         _curl_read_method_id = PA_GetMethodID((PA_Unichar *)methodName.c_str());
-                        _curl_read_method_ids.insert(std::map<uint32_t, uint32_t>::value_type(processId, _curl_read_method_id));
+                        if(_curl_read_method_id){
+                            error = curl_easy_setopt(curl, CURLOPT_READFUNCTION, _cURL_read_data);
+                            error = curl_easy_setopt(curl, CURLOPT_READDATA, &Param4InData);
+                            _curl_read_method_ids.insert(std::map<uint32_t, uint32_t>::value_type(processId, _curl_read_method_id));
+                        }
+                        break;
+                    case 57://CURLOPT_XFERINFODATA
+                        _curl_progress_id = atoi((const char *)value.c_str());
+                        _curl_progress_ids.insert(std::map<uint32_t, uint32_t>::value_type(processId, _curl_progress_id));
+                        break;
+                    case 219://CURLOPT_XFERINFOFUNCTION
+                        Param3Values.copyUTF16StringAtIndex(&methodName, i);
+                        _curl_progress_method_id = PA_GetMethodID((PA_Unichar *)methodName.c_str());
+                        if(_curl_progress_method_id){
+                            error = curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0);
+                            error = curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, _cURL_xfer_data);
+                            _curl_progress_method_ids.insert(std::map<uint32_t, uint32_t>::value_type(processId, _curl_progress_method_id));
+                        }
+                        break;
+                    case 79://CURLOPT_HEADERFUNCTION
+                        Param3Values.copyUTF16StringAtIndex(&methodName, i);
+                        _curl_header_method_id = PA_GetMethodID((PA_Unichar *)methodName.c_str());
+                        if(_curl_header_method_id){
+                            _curl_header_method_ids.insert(std::map<uint32_t, uint32_t>::value_type(processId, _curl_header_method_id));
+                            error = curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, _cURL_header_data);
+                        }
                         break;
                     case 24://CURLOPT_HTTPPOST
                         if((Param9DataObjects.fType == eVK_ArrayPicture)
@@ -897,7 +1040,6 @@ void _cURL(sLONG_PTR *pResult, PackagePtr pParams)
         
         if(values_CURLOPT_HTTPHEADER) curl_easy_setopt(curl, CURLOPT_HTTPHEADER, values_CURLOPT_HTTPHEADER);
         
-        curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 1);
         curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
         
         void (*_PA_YieldAbsolute)(void) = PA_YieldAbsolute;
@@ -928,6 +1070,14 @@ void _cURL(sLONG_PTR *pResult, PackagePtr pParams)
         pos = _curl_debug_method_ids.find(processId);
         if(pos != _curl_debug_method_ids.end()) _curl_debug_method_ids.erase(pos);
         
+        pos = _curl_progress_ids.find(processId);
+        if(pos != _curl_progress_ids.end()) _curl_progress_ids.erase(pos);
+        
+        pos = _curl_header_method_ids.find(processId);
+        if(pos != _curl_header_method_ids.end()) _curl_header_method_ids.erase(pos);
+        
+        pos = _curl_progress_method_ids.find(processId);
+        if(pos != _curl_progress_method_ids.end()) _curl_progress_method_ids.erase(pos);
     }
     
     if(error != CURLE_OK) returnValue.setIntValue(error);
