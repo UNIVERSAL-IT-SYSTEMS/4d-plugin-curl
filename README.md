@@ -42,7 +42,7 @@ $err:=cURL ($url;$optionNames;$optionValues;$in;$out)
 Progress QUIT ($progressId)
 ```
 
-####CB_PROGRESS_DL
+``CB_PROGRESS_DL``
 
 ```
 C_LONGINT($1;$2;$3;$4;$5)
@@ -64,15 +64,12 @@ Progress SET PROGRESS ($progressId;$progress;$message)
 $0:=Progress Stopped ($progressId)
 ```
 
-New
----
 ###cURL Get executable
 
 Returns the path to the curl executable embedded in the plugin. You can use this with LAUNCH EXTERNAL PROCESS.
 
-Example
----
-version
+###cURL Get version 
+
 ```
 $version:=cURL Get version 
   //libcurl/7.40.0 OpenSSL/1.0.1j zlib/1.2.8 libidn/1.29 libssh2/1.4.3
@@ -86,7 +83,9 @@ $stdErr:=""
 LAUNCH EXTERNAL PROCESS($path+" -V";$stdIn;$stdOut;$stdErr);
   //curl 7.40.0 (x86_64-apple-darwin14.0.0) libcurl/7.40.0 OpenSSL/1.0.1j zlib/1.2.8 libidn/1.29 libssh2/1.4.3\nProtocols: dict file ftp ftps gopher http https imap imaps ldap ldaps pop3 pop3s rtsp scp sftp smb smbs smtp smtps telnet tftp \nFeatures: IDN IPv6 Largefile NTLM NTLM_WB SSL libz TLS-SRP UnixSockets \n
 ```
-https
+
+###HTTPS debug
+
 ```
 C_BLOB($in;$out)
 C_LONGINT($err)
@@ -104,6 +103,18 @@ APPEND TO ARRAY($tNomOption;CURLOPT_DEBUGFUNCTION)
 APPEND TO ARRAY($tValOption;"CB_DEBUG")
 
 $err:=cURL ("https://github.com/";$tNomOption;$tValOption;$in;$out)
+```
+
+``CB_DEBUG``
+
+```
+C_LONGINT($1)
+C_BLOB($2)
+
+$infoType:=Choose($1;"info";"headerIn";"headerOut";"dataIn";"dataOut")
+$message:=BLOB to text($2;Mac text without length)
+
+MESSAGE($infoType+": "+$message)
 ```
 
 Version
