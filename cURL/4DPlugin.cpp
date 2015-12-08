@@ -321,10 +321,10 @@ void _cURL(sLONG_PTR *pResult, PackagePtr pParams)
         CUTF8String url;
         Param1Url.copyUTF8String(&url);
         
-//        error = curl_easy_setopt(curl, CURLOPT_READFUNCTION, _cURL_read_data);
-//        error = curl_easy_setopt(curl, CURLOPT_READDATA, &Param4InData);
-//        error = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, _cURL_write_data);
-//        error = curl_easy_setopt(curl, CURLOPT_WRITEDATA, &Param5OutData);
+        error = curl_easy_setopt(curl, CURLOPT_READFUNCTION, _cURL_read_data);
+        error = curl_easy_setopt(curl, CURLOPT_READDATA, &Param4InData);
+        error = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, _cURL_write_data);
+        error = curl_easy_setopt(curl, CURLOPT_WRITEDATA, &Param5OutData);
 //        error = curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, _cURL_debug_data);
 //        error = curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, _cURL_xfer_data);
 //        error = curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, _cURL_header_data);
@@ -380,8 +380,8 @@ void _cURL(sLONG_PTR *pResult, PackagePtr pParams)
                         Param3Values.copyUTF16StringAtIndex(&methodName, i);
                         _curl_write_method_id = PA_GetMethodID((PA_Unichar *)methodName.c_str());
                         if(_curl_write_method_id){
-                            error = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, _cURL_write_data);
-                            error = curl_easy_setopt(curl, CURLOPT_WRITEDATA, &Param5OutData);
+//                            error = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, _cURL_write_data);
+//                            error = curl_easy_setopt(curl, CURLOPT_WRITEDATA, &Param5OutData);
                             _curl_write_method_ids.insert(std::map<uint32_t, uint32_t>::value_type(processId, _curl_write_method_id));
                         }
                         break;
@@ -389,8 +389,8 @@ void _cURL(sLONG_PTR *pResult, PackagePtr pParams)
                         Param3Values.copyUTF16StringAtIndex(&methodName, i);
                         _curl_read_method_id = PA_GetMethodID((PA_Unichar *)methodName.c_str());
                         if(_curl_read_method_id){
-                            error = curl_easy_setopt(curl, CURLOPT_READFUNCTION, _cURL_read_data);
-                            error = curl_easy_setopt(curl, CURLOPT_READDATA, &Param4InData);
+//                            error = curl_easy_setopt(curl, CURLOPT_READFUNCTION, _cURL_read_data);
+//                            error = curl_easy_setopt(curl, CURLOPT_READDATA, &Param4InData);
                             _curl_read_method_ids.insert(std::map<uint32_t, uint32_t>::value_type(processId, _curl_read_method_id));
                         }
                         break;
