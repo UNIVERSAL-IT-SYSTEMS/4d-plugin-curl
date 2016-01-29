@@ -1,6 +1,25 @@
 # 4d-plugin-curl
 This is a 4D plugin implementation of [libcurl and cURL](http://curl.haxx.se).
 
+##Platform
+
+| carbon | cocoa | win32 | win64 |
+|:------:|:-----:|:---------:|:---------:|
+|🆗|🆗|🆗|🆗|
+
+Commands
+---
+
+```c
+// --- cURL
+cURL
+cURL_Escape_url
+cURL_Unescape_url
+cURL_Get_version
+cURL_Get_date
+cURL_Get_executable
+```
+
 Important
 ---
 This plugin project is a forked subset of what was published as [OAuth](https://github.com/miyako/4d-plugin-oauth).
