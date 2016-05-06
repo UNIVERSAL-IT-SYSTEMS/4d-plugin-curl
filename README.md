@@ -163,6 +163,17 @@ $message:=BLOB to text($2;Mac text without length)
 MESSAGE($infoType+": "+$message)
 ```
 
+###FTP commands
+```
+C_BLOB($in;$out)
+C_LONGINT($err)
+ARRAY LONGINT($tNomOption;0)
+ARRAY TEXT($tValOption;0)
+APPEND TO ARRAY($tNomOption;CURLOPT_QUOTE)
+APPEND TO ARRAY($tValOption;"DELE public_html/client/printpoint.me/productimages/nav_bkgnd_gray.png")
+
+```
+
 Version
 ---
 * v14 is for v14 and above, Windows & OS X 10.8+ 32/64 bits.
