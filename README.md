@@ -7,6 +7,61 @@ This is a 4D plugin implementation of [libcurl and cURL](http://curl.haxx.se).
 |:------:|:-----:|:---------:|:---------:|
 |🆗|🆗|🆗|🆗|
 
+**New**: added ``CURLOPT_WRITEDATA (1)`` and ``CURLOPT_READDATA (22)``. When a file path is passed, the in/out BLOBs are ignored and the file is used instead.
+
+* Example
+
+```
+//upload
+C_BLOB($in;$out)
+C_LONGINT($err)
+ARRAY LONGINT($optionNames;0)
+ARRAY TEXT($optionValues;0)
+
+Progress QUIT (0)
+
+$progressId:=Progress New 
+Progress SET PROGRESS ($progressId;-1)
+Progress SET BUTTON ENABLED ($progressId;True)
+
+APPEND TO ARRAY($optionNames;CURLOPT_XFERINFOFUNCTION)
+APPEND TO ARRAY($optionValues;"CB_PROGRESS_DL")
+
+APPEND TO ARRAY($optionNames;22)
+APPEND TO ARRAY($optionValues;System folder(Desktop)+"text.jpg")
+APPEND TO ARRAY($optionNames;CURLOPT_XFERINFODATA)
+APPEND TO ARRAY($optionValues;String($progressId))  //will be passed as $1
+APPEND TO ARRAY($optionNames;CURLOPT_POST)
+APPEND TO ARRAY($optionValues;"1")
+
+$err:=cURL ("http://localhost/test";$optionNames;$optionValues;$in;$out)
+
+Progress QUIT ($progressId)
+
+//download
+C_BLOB($in;$out)
+C_LONGINT($err)
+ARRAY LONGINT($optionNames;1)
+ARRAY TEXT($optionValues;1)
+
+Progress QUIT (0)
+
+$progressId:=Progress New 
+Progress SET PROGRESS ($progressId;-1)
+Progress SET BUTTON ENABLED ($progressId;True)
+
+APPEND TO ARRAY($optionNames;CURLOPT_XFERINFOFUNCTION)
+APPEND TO ARRAY($optionValues;"CB_PROGRESS_DL")
+APPEND TO ARRAY($optionNames;1)
+APPEND TO ARRAY($optionValues;System folder(Desktop)+"text.jpg")
+APPEND TO ARRAY($optionNames;CURLOPT_XFERINFODATA)
+APPEND TO ARRAY($optionValues;String($progressId))  //will be passed as $1
+
+$err:=cURL ("http://www.4d.com/sites/all/themes/dimention/images/home/logo4D.jpg";$optionNames;$optionValues;$in;$out)
+
+Progress QUIT ($progressId)
+```
+
 Commands
 ---
 
