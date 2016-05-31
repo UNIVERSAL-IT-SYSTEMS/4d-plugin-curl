@@ -21,6 +21,8 @@ void CBytes::fromParamAtIndex(PackagePtr pParams, uint32_t index)
 			
 			PA_MoveBlock(PA_LockHandle(h), (char *)&this->_CBytes[0], size);		
 			PA_UnlockHandle(h);
+		}else{
+			this->_CBytes.resize(0);
 		}
 	}
 }

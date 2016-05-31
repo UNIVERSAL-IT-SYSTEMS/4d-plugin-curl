@@ -19,18 +19,51 @@ std::map<uint32_t, uint32_t> _curl_debug_method_ids;
 std::map<uint32_t, uint32_t> _curl_progress_ids;
 std::map<uint32_t, uint32_t> _curl_progress_method_ids;
 std::map<uint32_t, uint32_t> _curl_header_method_ids;
+#if VERSIONMAC
+std::map<uint32_t, CUTF8String> _curl_input_paths;
+std::map<uint32_t, CUTF8String> _curl_output_paths;
+#else
+std::map<uint32_t, CUTF16String> _curl_input_paths;
+std::map<uint32_t, CUTF16String> _curl_output_paths;
+#endif
+std::map<uint32_t, long> _curl_input_positions;
 
 CURLcode curl_easy_perform_with_yield(CURL *easy, void (*_PA_YieldAbsolute)(void));
 
 size_t _cURL_write_data(void *buffer, size_t size, size_t nmemb, C_BLOB &outData){
     
     PA_YieldAbsolute();
-    
-    size_t len = size * nmemb;
-    
-    outData.addBytes((const uint8_t *)buffer, len);
-    
-    uint32_t processId = PA_GetCurrentProcessNumber();
+	
+		uint32_t processId = PA_GetCurrentProcessNumber();
+		size_t len = size * nmemb;
+	
+#if VERSIONMAC
+	std::map<uint32_t, CUTF8String>::iterator ppos = _curl_output_paths.find(processId);
+#else
+	std::map<uint32_t, CUTF16String>::iterator ppos = _curl_output_paths.find(processId);
+#endif
+	
+	if(ppos != _curl_output_paths.end())
+	{//out to file
+#if VERSIONMAC
+		CUTF8String path = ppos->second;
+#else
+		CUTF16String path = ppos->second;
+#endif
+#if VERSIONMAC
+		FILE *f = fopen ((const char *)path.c_str(), "ab");
+#else
+		FILE *f = _wfopen ((const wchar_t *)path.c_str(), L"ab");
+#endif
+		if(f)
+		{
+			fwrite(buffer, size, nmemb, f);
+			fclose(f);
+		}
+	}else{
+		outData.addBytes((const uint8_t *)buffer, len);
+	}
+
     uint32_t _curl_write_method_id = 0;
     
     std::map<uint32_t, uint32_t>::iterator pos = _curl_write_method_ids.find(processId);
@@ -129,13 +162,44 @@ size_t _cURL_debug_data(CURL *_curl, curl_infotype infoType, char * buffer, size
 size_t _cURL_read_data(void *buffer, size_t size, size_t nmemb, C_BLOB &inData){
     
     PA_YieldAbsolute();
-    
-    size_t len = size * nmemb;
-    
-    const uint8_t *ptr = inData.getBytesPtrForSize((uint32_t *)&len);
-    if(ptr) memcpy(buffer, ptr, len);
-    
-    uint32_t processId = PA_GetCurrentProcessNumber();
+
+	uint32_t processId = PA_GetCurrentProcessNumber();
+	size_t len = size * nmemb;
+	
+#if VERSIONMAC
+	std::map<uint32_t, CUTF8String>::iterator ppos = _curl_input_paths.find(processId);
+#else
+	std::map<uint32_t, CUTF16String>::iterator ppos = _curl_input_paths.find(processId);
+#endif
+	std::map<uint32_t, long>::iterator lpos = _curl_input_positions.find(processId);
+	
+	if((ppos != _curl_input_paths.end()) && (lpos != _curl_input_positions.end()))
+	{//out to file
+#if VERSIONMAC
+		CUTF8String path = ppos->second;
+#else
+		CUTF16String path = ppos->second;
+#endif
+		;
+		
+#if VERSIONMAC
+		FILE *f = fopen ((const char *)path.c_str(), "rb");
+#else
+		FILE *f = _wfopen ((const wchar_t *)path.c_str(), L"rb");
+#endif
+		if(f)
+		{
+			fseek(f, lpos->second, SEEK_SET);
+			len = fread(buffer, size, nmemb, f);
+			lpos->second += len;
+			fclose(f);
+		}
+	}else{
+		const uint8_t *ptr = inData.getBytesPtrForSize((uint32_t *)&len);
+		if(ptr) memcpy(buffer, ptr, len);
+		
+	}
+	
     uint32_t _curl_read_method_id = 0;
     
     std::map<uint32_t, uint32_t>::iterator pos = _curl_read_method_ids.find(processId);
@@ -325,10 +389,9 @@ void _cURL(sLONG_PTR *pResult, PackagePtr pParams)
         error = curl_easy_setopt(curl, CURLOPT_READDATA, &Param4InData);
         error = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, _cURL_write_data);
         error = curl_easy_setopt(curl, CURLOPT_WRITEDATA, &Param5OutData);
-//        error = curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, _cURL_debug_data);
-//        error = curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, _cURL_xfer_data);
-//        error = curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, _cURL_header_data);
-        
+			
+				unsigned long inFileSize = 0;
+			
         curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 1);
         
         struct curl_slist *values_CURLOPT_MAIL_RCPT = NULL;
@@ -364,8 +427,44 @@ void _cURL(sLONG_PTR *pResult, PackagePtr pParams)
                 switch (option) {
                     case 0://typically element #0 of array
                     case CURLOPT_URL:
-                    case CURLOPT_WRITEDATA:
-                    case CURLOPT_READDATA:
+												break;
+										case 1://CURLOPT_WRITEDATA
+										//file path (out)
+#if VERSIONMAC
+										Param3Values.copyPathAtIndex(&value, i);
+										_curl_output_paths.insert(std::map<uint32_t, CUTF8String>::value_type(processId, value));
+#else
+										Param3Values.copyUTF16StringAtIndex(&methodName, i);
+										_curl_output_paths.insert(std::map<uint32_t, CUTF16String>::value_type(processId, methodName));
+#endif
+												break;
+										case 22://CURLOPT_READDATA
+										//file path (in)
+									{
+#if VERSIONMAC
+										Param3Values.copyPathAtIndex(&value, i);
+										FILE *f = fopen ((const char *)value.c_str(), "rb");
+#else
+										Param3Values.copyUTF16StringAtIndex(&methodName, i);
+										FILE *f = _wfopen ((const wchar_t *)methodName.c_str(), L"rb");
+#endif
+										if(f)
+										{
+											fseek(f, 0L, SEEK_END);
+											inFileSize = ftell(f);
+											fclose(f);
+											if(inFileSize)
+											{
+												error = curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE_LARGE, inFileSize);
+											}
+										}
+#if VERSIONMAC
+										_curl_input_paths.insert(std::map<uint32_t, CUTF8String>::value_type(processId, value));
+#else
+										_curl_input_paths.insert(std::map<uint32_t, CUTF16String>::value_type(processId, methodName));
+#endif
+									}
+										_curl_input_positions.insert(std::map<uint32_t, long>::value_type(processId, 0));
                         break;
                     case 94://CURLOPT_DEBUGFUNCTION
                         Param3Values.copyUTF16StringAtIndex(&methodName, i);
@@ -380,8 +479,6 @@ void _cURL(sLONG_PTR *pResult, PackagePtr pParams)
                         Param3Values.copyUTF16StringAtIndex(&methodName, i);
                         _curl_write_method_id = PA_GetMethodID((PA_Unichar *)methodName.c_str());
                         if(_curl_write_method_id){
-//                            error = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, _cURL_write_data);
-//                            error = curl_easy_setopt(curl, CURLOPT_WRITEDATA, &Param5OutData);
                             _curl_write_method_ids.insert(std::map<uint32_t, uint32_t>::value_type(processId, _curl_write_method_id));
                         }
                         break;
@@ -389,8 +486,6 @@ void _cURL(sLONG_PTR *pResult, PackagePtr pParams)
                         Param3Values.copyUTF16StringAtIndex(&methodName, i);
                         _curl_read_method_id = PA_GetMethodID((PA_Unichar *)methodName.c_str());
                         if(_curl_read_method_id){
-//                            error = curl_easy_setopt(curl, CURLOPT_READFUNCTION, _cURL_read_data);
-//                            error = curl_easy_setopt(curl, CURLOPT_READDATA, &Param4InData);
                             _curl_read_method_ids.insert(std::map<uint32_t, uint32_t>::value_type(processId, _curl_read_method_id));
                         }
                         break;
@@ -793,15 +888,24 @@ void _cURL(sLONG_PTR *pResult, PackagePtr pParams)
                         break;
                         //set the body size here, for security
                     case 54://CURLOPT_PUT:
-                        curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, Param4InData.getBytesLength());
+											if(!inFileSize)
+											{
+													curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, Param4InData.getBytesLength());
+											}
                         curl_easy_setopt(curl, CURLOPT_PUT, atoi((const char *)value.c_str()));
                         break;
                     case 47://CURLOPT_POST:
-                        curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, Param4InData.getBytesLength());
+											if(!inFileSize)
+											{
+												curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, Param4InData.getBytesLength());
+											}
                         curl_easy_setopt(curl, CURLOPT_POST, atoi((const char *)value.c_str()));
                         break;
                     case 46://CURLOPT_UPLOAD:
-                        curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, Param4InData.getBytesLength());
+											if(!inFileSize)
+											{
+												curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, Param4InData.getBytesLength());
+											}
                         curl_easy_setopt(curl, CURLOPT_UPLOAD, atoi((const char *)value.c_str()));
                         break;
                     case 187://CURLOPT_MAIL_RCPT
@@ -1060,7 +1164,13 @@ void _cURL(sLONG_PTR *pResult, PackagePtr pParams)
         curl_easy_cleanup(curl);
         
         std::map<uint32_t, uint32_t>::iterator pos;
-        
+				std::map<uint32_t, long>::iterator lpos;
+#if VERSIONMAC
+			std::map<uint32_t, CUTF8String>::iterator ppos;
+#else
+			std::map<uint32_t, CUTF16String>::iterator ppos;
+#endif
+			
         pos = _curl_write_method_ids.find(processId);
         if(pos != _curl_write_method_ids.end()) _curl_write_method_ids.erase(pos);
         
@@ -1078,6 +1188,15 @@ void _cURL(sLONG_PTR *pResult, PackagePtr pParams)
         
         pos = _curl_progress_method_ids.find(processId);
         if(pos != _curl_progress_method_ids.end()) _curl_progress_method_ids.erase(pos);
+
+				lpos = _curl_input_positions.find(processId);
+				if(lpos != _curl_input_positions.end()) _curl_input_positions.erase(lpos);
+			
+				ppos = _curl_input_paths.find(processId);
+				if(ppos != _curl_input_paths.end()) _curl_input_paths.erase(ppos);
+			
+				ppos = _curl_output_paths.find(processId);
+				if(ppos != _curl_output_paths.end()) _curl_output_paths.erase(ppos);
     }
     
     if(error != CURLE_OK) returnValue.setIntValue(error);
